@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shopping Backend API Tester</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #f3f5f9; color: #1f2937; }
+    header { background: #172554; color: white; padding: 24px 18px; }
+    header h1 { margin: 0 0 8px; font-size: 28px; }
+    header p { margin: 0; color: #dbeafe; }
+    main { max-width: 1100px; margin: 24px auto; padding: 0 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    section { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 3px 14px #0f172a12; }
+    h2 { margin-top: 0; font-size: 20px; }
+    label { display: block; font-weight: 700; margin: 12px 0 6px; }
+    input, select, textarea, button { font: inherit; }
+    input, select, textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 7px; background: #fff; }
+    textarea { min-height: 130px; resize: vertical; font-family: Consolas, monospace; }
+    button { border: 0; border-radius: 7px; padding: 11px 15px; background: #2563eb; color: white; cursor: pointer; font-weight: 700; }
+    button:hover { background: #1d4ed8; }
+    .secondary { background: #475569; }
+    .secondary:hover { background: #334155; }
+    .danger { background: #dc2626; }
+    .danger:hover { background: #b91c1c; }
+    .row { display: flex; gap: 10px; align-items: center; }
+    .row > * { flex: 1; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .hint { color: #64748b; font-size: 13px; line-height: 1.5; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 14px; min-height: 110px; }
+    .product { border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px; margin: 8px 0; }
+    .product strong { display: block; margin-bottom: 4px; }
+    .status { font-weight: 700; }
+    @media (max-width: 760px) { main { grid-template-columns: 1fr; } header h1 { font-size: 23px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Online Shopping App</h1>
+    <p>Frontend interface for the Shopping Backend REST API</p>
+  </header>
+
+  <main>
+    <section>
+      <h2>Products</h2>
+      <p class="hint">This page calls the Node.js API at <code>http://localhost:5000</code>. Start <code>server.js</code> first.</p>
+      <div class="actions">
+        <button type="button" onclick="loadProducts()">Load all products</button>
+      </div>
+      <div id="products"><p class="hint">Click “Load all products” to view products.</p></div>
+    </section>
+
+    <section>
+      <h2>Add / Update Product</h2>
+      <form id="productForm">
+        <label for="productId">Product ID (leave blank to add a new product)</label>
+        <input id="productId" type="number" min="1" placeholder="Example: 1">
+        <label for="name">Product name</label>
+        <input id="name" required placeholder="Example: Keyboard">
+        <div class="row">
+          <div>
+            <label for="price">Price (₹)</label>
+            <input id="price" type="number" min="0" step="0.01" required placeholder="1500">
+          </div>
+          <div>
+            <label for="category">Category</label>
+            <input id="category" required placeholder="Electronics">
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit">Save product</button>
+          <button class="secondary" type="button" onclick="resetForm()">Clear form</button>
+        </div>
+      </form>
+      <p class="hint">Blank ID sends POST /api/products. An ID sends PUT /api/products/:id.</p>
+    </section>
+
+    <section>
+      <h2>Find / Delete Product</h2>
+      <label for="searchId">Product ID</label>
+      <input id="searchId" type="number" min="1" placeholder="Enter product ID">
+      <div class="actions">
+        <button type="button" onclick="findProduct()">Find product</button>
+        <button class="danger" type="button" onclick="deleteProduct()">Delete product</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>API Response</h2>
+      <p id="status" class="status">Waiting for a request…</p>
+      <pre id="response">{ "message": "API response will appear here" }</pre>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE = "http://localhost:5000/api/products";
+
+    function showResponse(status, data) {
+      document.getElementById("status").textContent = status;
+      document.getElementById("response").textContent =
+        typeof data === "string" ? data : JSON.stringify(data, null, 2);
+    }
+
+    async function request(url, options = {}) {
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers: { "Content-Type": "application/json", ...(options.headers || {}) }
+        });
+        const text = await response.text();
+        let data;
+        try { data = text ? JSON.parse(text) : {}; }
+        catch { data = text; }
+        showResponse(`${response.status} ${response.statusText}`, data);
+        if (!response.ok) throw new Error(data.message || "Request failed");
+        return data;
+      } catch (error) {
+        showResponse("Request error", {
+          message: error.message,
+          hint: "Make sure the backend is running and CORS is enabled. Run: node server.js"
+        });
+        return null;
+      }
+    }
+
+    async function loadProducts() {
+      const data = await request(API_BASE);
+      const container = document.getElementById("products");
+      container.innerHTML = "";
+      if (!data) {
+        container.innerHTML = "<p class='hint'>Could not load products. Check the API server.</p>";
+        return;
+      }
+      const products = Array.isArray(data) ? data : data.products;
+      if (!Array.isArray(products) || products.length === 0) {
+        container.innerHTML = "<p class='hint'>No products found.</p>";
+        return;
+      }
+      products.forEach(product => {
+        const card = document.createElement("div");
+        card.className = "product";
+        const name = document.createElement("strong");
+        name.textContent = product.name;
+        const details = document.createElement("span");
+        details.textContent = `ID: ${product.id} · ₹${product.price} · ${product.category}`;
+        const edit = document.createElement("button");
+        edit.type = "button";
+        edit.className = "secondary";
+        edit.style.marginTop = "10px";
+        edit.textContent = "Edit";
+        edit.onclick = () => {
+          document.getElementById("productId").value = product.id;
+          document.getElementById("name").value = product.name;
+          document.getElementById("price").value = product.price;
+          document.getElementById("category").value = product.category;
+        };
+        card.append(name, details, document.createElement("br"), edit);
+        container.appendChild(card);
+      });
+    }
+
+    async function findProduct() {
+      const id = document.getElementById("searchId").value.trim();
+      if (!id) return showResponse("Validation error", { message: "Enter a product ID." });
+      await request(`${API_BASE}/${encodeURIComponent(id)}`);
+    }
+
+    async function deleteProduct() {
+      const id = document.getElementById("searchId").value.trim();
+      if (!id) return showResponse("Validation error", { message: "Enter a product ID." });
+      if (!confirm(`Delete product ${id}?`)) return;
+      const data = await request(`${API_BASE}/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (data) loadProducts();
+    }
+
+    function resetForm() {
+      document.getElementById("productForm").reset();
+    }
+
+    document.getElementById("productForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      const id = document.getElementById("productId").value.trim();
+      const product = {
+        name: document.getElementById("name").value.trim(),
+        price: Number(document.getElementById("price").value),
+        category: document.getElementById("category").value.trim()
+      };
+      const url = id ? `${API_BASE}/${encodeURIComponent(id)}` : API_BASE;
+      const method = id ? "PUT" : "POST";
+      const data = await request(url, { method, body: JSON.stringify(product) });
+      if (data) {
+        resetForm();
+        await loadProducts();
+      }
+    });
+  </script>
+</body>
+</html>
